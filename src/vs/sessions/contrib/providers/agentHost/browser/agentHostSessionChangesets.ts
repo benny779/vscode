@@ -45,25 +45,10 @@ function sessionFileChangeUri(change: ISessionFileChange): URI {
 }
 
 /**
- * Filters `changes` down to those whose file lives under the session's
- * **primary working directory** (`workingDirectories[0]`), but only for
- * *multi-root* sessions. Single-root, empty and `undefined` inputs are returned
- * unchanged (same reference), preserving existing single-root behavior.
- *
- * The Agents Window "Last Turn Changes" tree roots at the primary working
- * directory, so restricting to files under it keeps the tree renderable with
- * proper relative paths. This is a pure, side-effect-free predicate.
- *
- * A change URI keeps the workspace file path verbatim even when the adapter has
- * wrapped it as `agent-host:`, so each change is compared by rebuilding it on the
- * primary directory's (`file:`) scheme. This both aligns schemes (a raw `file:`
- * directory would never match a mapped `agent-host:` change) and keeps file-path
- * case semantics (the scheme-biased comparer treats non-`file:` paths as
- * case-insensitive, which would wrongly match case-differing sibling roots).
- *
- * @param changes The unfiltered last-turn changes.
- * @param workingDirectories The session's ordered working directories, as URI
- *   strings (index 0 is the primary directory).
+ * For multi-root sessions, keeps only changes under the primary working
+ * directory (`workingDirectories[0]`); single-root/empty/`undefined` inputs are
+ * returned unchanged. Paths are compared on the primary's `file:` scheme so
+ * `agent-host:`-wrapped changes still match and OS path-casing is respected.
  */
 export function filterChangesToPrimaryWorkingDirectory(
 	changes: readonly ISessionFileChange[],
