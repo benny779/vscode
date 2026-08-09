@@ -1424,7 +1424,7 @@ suite('AgentHostChangesetService - multi-root turn changeset', () => {
 			[URI.file('/repoBad/x.ts').toString(), URI.file('/repoGood/g.ts').toString()].sort(),
 			'the failed git repo contributes its DB-tracked edits instead of dropping the folder',
 		);
-		assert.ok(log.errors.some(e => e.includes('repoBad') && e.includes('falling back to DB')), `expected a fallback error naming the repo, got ${JSON.stringify(log.errors)}`);
+		assert.ok(log.errors.some(e => e.includes('repoBad') && e.includes('falling back to tracked edits')), `expected a fallback error naming the repo, got ${JSON.stringify(log.errors)}`);
 	});
 
 	test('a folder whose repository-root lookup throws is treated as non-git (DB fallback) without dropping the whole turn', async () => {

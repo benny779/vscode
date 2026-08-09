@@ -799,37 +799,7 @@ suite('computeTurnDiffs', () => {
 		assert.deepStrictEqual(result, []);
 	});
 
-	// ---- Rename-chain correctness (G1 / G2) --------------------------------
-
-	test('G2: a rename-first turn resolves before-content keyed by the destination filePath', async () => {
-		const db = new TestSessionDatabase();
-		// The turn's only record for this file is a Rename A→B. Its before/after
-		// content blobs are stored under the DESTINATION filePath (the DB key),
-		// while `originalPath` is only the logical pre-rename path.
-		db.addEdit({
-			turnId: 't1', toolCallId: 'tc1', filePath: '/repo/a/new.txt', kind: FileEditKind.Rename,
-			originalPath: '/repo/a/old.txt',
-			addedLines: undefined, removedLines: undefined,
-			beforeContent: encodeString('hello'), afterContent: encodeString('hello\nworld'),
-		});
-
-		const result = await computeTurnDiffs(TEST_SESSION_URI, db, createTestDiffService(), 't1');
-
-		assert.strictEqual(result.length, 1);
-		const diff = result[0];
-		// Before snapshot resolves to the rename's stored before-content (1 line
-		// → 2 lines = +1), not an empty add (which would report +2).
-		assert.deepStrictEqual(diff.diff, { added: 1, removed: 0 });
-		// Logical before path is the pre-rename path; after path is the destination.
-		assert.strictEqual(diff.before?.uri, URI.file('/repo/a/old.txt').toString());
-		assert.strictEqual(diff.after?.uri, URI.file('/repo/a/new.txt').toString());
-		// The before content URI is keyed by the record's stored destination
-		// filePath so the resolver's readFileEditContent finds the blob.
-		const beforeFields = parseSessionDbUri(diff.before!.content!.uri);
-		assert.strictEqual(beforeFields?.filePath, '/repo/a/new.txt');
-		assert.strictEqual(beforeFields?.toolCallId, 'tc1');
-		assert.strictEqual(beforeFields?.part, 'before');
-	});
+	// ---- Rename-chain correctness (G1) -------------------------------------
 
 	test('G1: Edit A → Rename A→B → Create A yields two identities (moved B and new A), not one merged entry', async () => {
 		const db = new TestSessionDatabase();

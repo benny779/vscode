@@ -21,7 +21,7 @@ function createSessionFileDiff(beforeSessionUri: string, afterSessionUri: string
 		...(hasBefore ? {
 			before: {
 				uri: URI.file(identity.firstFilePath).toString(),
-				content: { uri: buildSessionDbUri(beforeSessionUri, identity.firstToolCallId, identity.firstContentPath, 'before') },
+				content: { uri: buildSessionDbUri(beforeSessionUri, identity.firstToolCallId, identity.firstFilePath, 'before') },
 			},
 		} : {}),
 		...(hasAfter ? {
@@ -45,14 +45,6 @@ interface IFileIdentity {
 	firstToolCallId: string;
 	/** File path used in the first edit's database record. */
 	firstFilePath: string;
-	/**
-	 * The first edit's database `file_path`, used with {@link firstToolCallId} to
-	 * load its stored "before" snapshot.
-	 *
-	 * For a rename from `a.ts` to `b.ts`, this is `b.ts`, while
-	 * {@link firstFilePath} is `a.ts`. For a normal edit, both paths are equal.
-	 */
-	firstContentPath: string;
 	/** The kind of the first edit (Create means no "before" content). */
 	firstKind: FileEditKind;
 	/** Index into the sources array of the DB that owns the first edit. */
@@ -201,7 +193,6 @@ export async function computeSessionDiffs(
 				terminalPath: edit.filePath,
 				firstToolCallId: edit.toolCallId,
 				firstFilePath: edit.kind === FileEditKind.Rename && edit.originalPath ? edit.originalPath : edit.filePath,
-				firstContentPath: edit.filePath,
 				firstKind: edit.kind,
 				firstSourceIdx: 0,
 				lastToolCallId: edit.toolCallId,
@@ -246,7 +237,7 @@ export async function computeSessionDiffs(
 			if (identity.firstKind === FileEditKind.Create) {
 				beforeText = '';
 			} else {
-				const content = await db.readFileEditContent(identity.firstToolCallId, identity.firstContentPath);
+				const content = await db.readFileEditContent(identity.firstToolCallId, identity.firstFilePath);
 				beforeText = content?.beforeContent ? new TextDecoder().decode(content.beforeContent) : '';
 			}
 
@@ -339,7 +330,6 @@ export async function computeUnionedDiffs(
 					terminalPath: edit.filePath,
 					firstToolCallId: edit.toolCallId,
 					firstFilePath: edit.kind === FileEditKind.Rename && edit.originalPath ? edit.originalPath : edit.filePath,
-					firstContentPath: edit.filePath,
 					firstKind: edit.kind,
 					firstSourceIdx: sourceIdx,
 					lastToolCallId: edit.toolCallId,
@@ -379,7 +369,7 @@ export async function computeUnionedDiffs(
 			if (identity.firstKind === FileEditKind.Create) {
 				beforeText = '';
 			} else {
-				const content = await firstSource.db.readFileEditContent(identity.firstToolCallId, identity.firstContentPath);
+				const content = await firstSource.db.readFileEditContent(identity.firstToolCallId, identity.firstFilePath);
 				beforeText = content?.beforeContent ? new TextDecoder().decode(content.beforeContent) : '';
 			}
 
@@ -465,7 +455,6 @@ export async function computeTurnDiffs(
 				terminalPath: edit.filePath,
 				firstToolCallId: edit.toolCallId,
 				firstFilePath: edit.kind === FileEditKind.Rename && edit.originalPath ? edit.originalPath : edit.filePath,
-				firstContentPath: edit.filePath,
 				firstKind: edit.kind,
 				firstSourceIdx: 0,
 				lastToolCallId: edit.toolCallId,
@@ -496,7 +485,7 @@ export async function computeTurnDiffs(
 			if (identity.firstKind === FileEditKind.Create) {
 				beforeText = '';
 			} else {
-				const content = await db.readFileEditContent(identity.firstToolCallId, identity.firstContentPath);
+				const content = await db.readFileEditContent(identity.firstToolCallId, identity.firstFilePath);
 				beforeText = content?.beforeContent ? new TextDecoder().decode(content.beforeContent) : '';
 			}
 			let afterText: string;
