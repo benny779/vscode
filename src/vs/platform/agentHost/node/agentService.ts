@@ -4225,24 +4225,30 @@ export class AgentService extends Disposable implements IAgentService {
 	}
 
 	/**
-	 * Chooses, SERVER-SIDE, the working directory to run `git show` from for a
-	 * `git-blob:` URI. The directory is picked ONLY from the session's own,
-	 * server-trusted working directories — resolved to their repository roots
-	 * via {@link resolveSessionRepositories} — so a multi-root session opens a
-	 * changed file's before/after blob against the CORRECT repository. The
-	 * blob's absolute path (carried in the URI `path`) is used SOLELY to select
-	 * the deepest containing repo root; it is never used as a cwd itself, so a
-	 * path under no session repository resolves to `undefined` (→ NotFound)
-	 * rather than reading a wrong file from the primary. This is the security
-	 * invariant behind rejecting Q5 Option B (a client-supplied cwd in the URI).
+	 * Picks the working directory to run `git show` from for a `git-blob:` URI.
 	 *
-	 * A single-folder session keeps today's behavior: its one repo root contains
-	 * the path and is selected.
+	 * The directory is chosen only from the session's own, server-trusted working
+	 * directories — never from anything client-supplied — so opening a diff can
+	 * never be steered into an arbitrary repository. `fields.absolutePath` (the
+	 * file's absolute path, carried in the URI) is used only to *select* which
+	 * repo to run in; it is never used as the cwd itself.
 	 *
-	 * Backwards-compat: older persisted `git-blob:` URIs may carry no usable
-	 * absolute path (`absolutePath === ''`); without a path to match we cannot
-	 * select a root, so we fall back to the session's primary working directory
-	 * — today's behavior — so existing single-folder diffs still open.
+	 * Selection rules:
+	 * - Single-folder session: return the one working directory directly, without
+	 *   a containment check (preserves legacy behavior for relocated/remapped
+	 *   worktrees whose stored path no longer sits under the current root).
+	 * - Multi-root session: resolve each working directory to its repo root and
+	 *   return the deepest root that contains `absolutePath`; if none contains it,
+	 *   return `undefined` (→ NotFound) rather than reading from the wrong repo.
+	 * - Legacy URI with no `absolutePath` (`''`): fall back to the primary
+	 *   working directory, since there is no path to match.
+	 *
+	 * Examples (roots index 0 = primary):
+	 *   [/work/app]                    + /work/app/src/a.ts   → /work/app
+	 *   [/work/app]                    + /elsewhere/x.ts      → /work/app
+	 *   [/work/app, /work/app/pkgs/ui] + /work/app/pkgs/ui/b  → /work/app/pkgs/ui
+	 *   [/work/app, /work/lib]         + /outside/c.ts        → undefined (NotFound)
+	 *   [/work/app, /work/lib]         + ''  (legacy)         → /work/app
 	 */
 	private async _resolveGitBlobWorkingDirectory(fields: IGitBlobUriFields): Promise<URI | undefined> {
 		const gitService = this._gitService;

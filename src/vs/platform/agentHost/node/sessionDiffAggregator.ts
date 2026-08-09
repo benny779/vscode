@@ -46,10 +46,11 @@ interface IFileIdentity {
 	/** File path used in the first edit's database record. */
 	firstFilePath: string;
 	/**
-	 * The stored `file_path` key of the first edit's record, used to read its
-	 * before-content. Differs from {@link firstFilePath} only when the first
-	 * edit is a rename: content is keyed by the destination path while
-	 * {@link firstFilePath} keeps the logical pre-rename path.
+	 * The first edit's database `file_path`, used with {@link firstToolCallId} to
+	 * load its stored "before" snapshot.
+	 *
+	 * For a rename from `a.ts` to `b.ts`, this is `b.ts`, while
+	 * {@link firstFilePath} is `a.ts`. For a normal edit, both paths are equal.
 	 */
 	firstContentPath: string;
 	/** The kind of the first edit (Create means no "before" content). */

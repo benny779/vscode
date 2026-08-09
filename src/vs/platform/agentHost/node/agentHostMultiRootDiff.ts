@@ -16,19 +16,25 @@ import type { ISessionFileDiff } from '../common/state/sessionState.js';
  */
 
 /**
- * Merges several ordered diff lists into one, keeping the FIRST occurrence of
- * each file. The multi-root callers pass their git sources ahead of the
- * DB-tracked (non-git) source, so a git diff always wins over a DB-tracked edit
- * for the same file.
+ * Merges several ordered change lists into one, keeping the FIRST diff seen for
+ * each file. Priority is purely positional — the earliest list wins; this helper
+ * is source-agnostic and never inspects where a diff came from.
  *
- * Files are keyed by their destination (`after?.uri`, falling back to
- * `before?.uri` for deletions). For `file:` URIs the key is the biased,
- * path-case-aware comparison key ({@link extUriBiasedIgnorePathCase}), so two
- * sources reporting the same file with different casing collapse to one on
- * case-insensitive platforms (macOS/Windows) while staying distinct on Linux —
- * matching how the rest of the agent host compares file paths. Non-`file` URIs
- * keep their exact string identity so unrelated synthetic resources are never
- * folded together.
+ * A file is identified by `after.uri` (or `before.uri` for deletions); diffs
+ * with neither are skipped. `file:` paths match per-OS (case-insensitive on
+ * macOS/Windows, case-sensitive on Linux); other schemes match by exact string.
+ *
+ * The multi-root turn caller passes its git-repo diffs before the non-git
+ * edit-tracker list, so git wins when both report the same file — e.g. a git
+ * repo nested under a non-git folder, where the file appears in both the repo's
+ * git diff and the folder's edit-tracker list.
+ *
+ * Example (macOS/Windows), git list first, edit-tracker list second:
+ *   gitRepoA:    [ file:///work/repoA/App.ts, file:///work/repoA/Gone.ts (deleted) ]
+ *   editTracker: [ file:///work/repoA/app.ts, file:///work/notes.md ]
+ *   ->           [ App.ts (git), Gone.ts (git), notes.md ]
+ * `app.ts` is dropped as a case-insensitive duplicate of the git `App.ts`; on
+ * Linux both would be kept as distinct files.
  */
 export function dedupeSessionFileDiffs(orderedDiffLists: readonly (readonly ISessionFileDiff[])[]): ISessionFileDiff[] {
 	const merged: ISessionFileDiff[] = [];
@@ -59,13 +65,16 @@ function dedupeKeyForDiffId(id: string): string {
 
 /**
  * Whether a multi-root summary aggregate could be computed from all, some, or
- * none of its diff sources.
+ * none of its diff sources. A source is "available" when it was computed
+ * successfully — including an empty `[]` (a successful "no changes" result);
+ * only `undefined` means it could not be computed.
  *
- * - `complete` — every source produced diffs.
- * - `partial` — at least one source produced diffs and at least one did not.
- * - `failed` — no source produced diffs. This covers both a total failure (all
- *   sources errored) and the degenerate case of no sources at all; callers use
- *   it to preserve the previously cached summary rather than overwriting it
+ * - `complete` — every source was computed successfully (an empty result counts).
+ * - `partial` — at least one source was computed successfully and at least one
+ *   could not be.
+ * - `failed` — no source could be computed. This covers both a total failure
+ *   (all sources errored) and the degenerate case of no sources at all; callers
+ *   use it to preserve the previously cached summary rather than overwriting it
  *   with a zero (or under-counted) aggregate.
  */
 export type MultiRootDiffOutcome = 'complete' | 'partial' | 'failed';
@@ -73,18 +82,37 @@ export type MultiRootDiffOutcome = 'complete' | 'partial' | 'failed';
 export interface IMultiRootDiffEvaluation {
 	readonly outcome: MultiRootDiffOutcome;
 	/**
-	 * The sources that produced diffs, in input order. Callers sum only these
-	 * so an unavailable source contributes nothing (rather than a spurious
-	 * zero) to the aggregate.
+	 * The sources that were computed successfully (available), in input order.
+	 * Callers sum only these so an unavailable source contributes nothing
+	 * (rather than a spurious zero) to the aggregate.
 	 */
 	readonly availableSources: readonly (readonly ISessionFileDiff[])[];
 }
 
 /**
- * Classifies an ordered set of diff sources by availability. A source is
- * *available* iff its diffs are defined (`[]` counts as an available,
- * successfully-empty source); an `undefined` entry marks a source that could
- * not be computed. Input order is preserved in {@link IMultiRootDiffEvaluation.availableSources}.
+ * Classifies an ordered list of diff sources so the caller knows whether to
+ * publish a fresh aggregate or keep the previously cached one.
+ *
+ * A source is *available* when its diffs are defined; `undefined` means it
+ * could not be computed (e.g. a repo's git diff threw). An empty array `[]` is
+ * a successful "no changes" result and still counts as available. The returned
+ * {@link IMultiRootDiffEvaluation.availableSources} keeps input order and drops
+ * the `undefined` entries, so the caller can sum only what was available.
+ *
+ * Outcome (see {@link MultiRootDiffOutcome}): `complete` = all available,
+ * `partial` = some available, `failed` = none available (all errored, or no
+ * sources at all — the signal to preserve the cached summary).
+ *
+ * Note the difference between "successful zero" and "failed": `[[], []]` →
+ * `complete` (publish a real zero), but `[undefined, undefined]` and `[]` →
+ * `failed` (keep the cached value).
+ *
+ * @example
+ * [[a], [b]]             -> complete, [[a], [b]]
+ * [[a], []]              -> complete, [[a], []]     // [] is available
+ * [[a], undefined]       -> partial,  [[a]]
+ * [undefined, undefined] -> failed,   []            // total failure
+ * []                     -> failed,   []            // no sources at all
  */
 export function evaluateMultiRootDiffSources(orderedSources: readonly (readonly ISessionFileDiff[] | undefined)[]): IMultiRootDiffEvaluation {
 	const availableSources = orderedSources.filter((source): source is readonly ISessionFileDiff[] => source !== undefined);
